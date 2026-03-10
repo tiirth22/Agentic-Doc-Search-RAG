@@ -144,4 +144,4 @@ if prompt := st.chat_input("Ask a policy question..."):
 
 # --- FOOTER ---
 st.markdown("---")
-st.caption("Built with LangGraph, Groq, and ChromaDB • Final Project Milestone")
+st.caption("Built by Tirth Jignesh Dalal • Powered by LangGraph, Groq, and ChromaDB")
