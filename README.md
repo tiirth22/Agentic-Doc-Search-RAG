@@ -1,346 +1,186 @@
-<h1 align="center">🦊 Agentic Doc Search RAG</h1>
+# 🦊 Agentic Doc Search RAG
+
+> **An intelligent document search system powered by Agentic RAG — it doesn't just retrieve, it *thinks* before answering.**
 
 <p align="center">
-  <b>A production-grade, Self-Corrective Agentic RAG system that reasons before it answers —<br/>built to solve the silent hallucination problem in standard RAG pipelines.</b>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.11-blue?style=flat-square&logo=python" />
-  <img src="https://img.shields.io/badge/LangGraph-Agentic_RAG-orange?style=flat-square" />
-  <img src="https://img.shields.io/badge/LLM-Groq_Llama_3.1_8B-green?style=flat-square" />
-  <img src="https://img.shields.io/badge/VectorDB-ChromaDB-red?style=flat-square" />
-  <img src="https://img.shields.io/badge/UI-Streamlit-ff4b4b?style=flat-square&logo=streamlit" />
-  <img src="https://img.shields.io/badge/MCP-FastMCP_Server-blueviolet?style=flat-square" />
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" />
+  <img src="https://img.shields.io/badge/Python-3.11+-blue?style=for-the-badge&logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/LangGraph-Agent-orange?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Groq-Llama_3.1-green?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/ChromaDB-Vector_Store-red?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Streamlit-UI-ff4b4b?style=for-the-badge&logo=streamlit&logoColor=white" />
+  <img src="https://img.shields.io/badge/MCP-Server-blueviolet?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" />
 </p>
 
 ---
 
-## Table of Contents
+## 📸 Screenshots
 
-- [Live Demo — Screenshots](#live-demo--screenshots)
-- [Why This Project Exists — The Problem](#why-this-project-exists--the-problem)
-- [The Solution: Agentic Self-Corrective RAG](#the-solution-agentic-self-corrective-rag)
-- [Agent Architecture](#agent-architecture)
-- [Core Design Decisions](#core-design-decisions)
-- [Implementation Walkthrough](#implementation-walkthrough)
-- [Tech Stack](#tech-stack)
-- [MCP Server Integration](#mcp-server-integration)
-- [Project Structure](#project-structure)
-- [Setup & Run](#setup--run)
-- [Sample Q&A Results](#sample-qa-results)
-- [Engineering Highlights](#engineering-highlights)
-- [License](#license)
+| Accurate Policy Answer | Out-of-Scope Rejection |
+|:---:|:---:|
+| ![screenshot1](assets/SS1.png) | ![screenshot2](assets/SS2.png) |
+
+| MCP Inspector Validation |
+|:---:|
+| ![screenshot4](assets/SS4.png) |
 
 ---
 
-## Live Demo — Screenshots
+## 💡 What is this?
 
-> The following screenshots demonstrate the system working end-to-end: correct answers with full agent path transparency, graceful out-of-scope rejection, live session metrics, and MCP server tool validation.
+Most RAG systems follow a simple pattern: take a user's question, fetch some documents, and generate an answer. The problem? They *always* answer — even when the retrieved documents have nothing to do with the question. This leads to hallucinations that look convincing but are completely wrong.
 
-### 1. Accurate Policy Answer with Agent Path Trace
-> Query about security policy responsibilities — system retrieves relevant chunks, grades them as relevant, and generates a cited answer. The agent path (`retrieve → grade_documents → generate`) is visible in real time.
+I built this project to tackle that exact issue. Instead of a basic retrieve-and-generate pipeline, this system uses an **agentic approach** — it evaluates whether the retrieved documents are actually relevant before deciding to answer. If they're not relevant, it says so honestly instead of making something up.
 
-![Accurate answer with agent path trace](assets/SS1.png)
-
----
-
-### 2. Graceful Out-of-Scope Rejection — Zero Hallucination
-> Query completely outside the document domain — the grading node correctly identifies retrieved chunks as irrelevant, routes to the `no_answer` node, and returns an honest rejection. No fabricated answer.
-
-![Out-of-scope graceful rejection](assets/SS2.png)
+The knowledge base I'm using here is a set of **6 GitLab Security & Technology Policy documents** (Access Management, Audit Logging, Change Management, Penetration Testing, SDLC, and Policy Governance).
 
 ---
 
+## 🧠 How it Works
 
-### 3. MCP Server Tool Validation — Inspector Confirmed
-> The RAG system exposed as an MCP tool, called through MCP Inspector. Result validated as `✓ Valid according to output schema` — proving the server is production-ready for AI agent integration.
-
-![MCP Inspector validation](assets/SS4.png)
-
----
-
-## Why This Project Exists — The Problem
-
-Standard RAG (Retrieval-Augmented Generation) pipelines follow a fixed, linear path:
+The whole system is built as a **LangGraph state graph** with 4 nodes that work together:
 
 ```
-User Query → Retrieve Docs → Generate Answer
+  User asks a question
+          │
+          ▼
+    ┌───────────┐
+    │  Retrieve  │   → Searches ChromaDB for the top-6 most relevant chunks
+    └─────┬─────┘
+          │
+          ▼
+  ┌───────────────┐
+  │  Grade Docs   │   → LLM checks: "Are these documents actually relevant?"
+  └───────┬───────┘
+          │
+     ┌────┴────┐
+     │         │
+  Relevant   Not Relevant
+     │         │
+     ▼         ▼
+ ┌────────┐  ┌──────────┐
+ │Generate│  │ No Answer │  → Politely declines instead of hallucinating
+ └────┬───┘  └─────┬────┘
+      │            │
+      └─────┬──────┘
+            ▼
+          Done
 ```
 
-This architecture **always generates an answer** — regardless of whether the retrieved documents are actually relevant or whether the question is even in scope. In production, this creates three failure modes that are silent and dangerous:
-
-### Failure Mode 1: Irrelevant Retrieval with Confident Hallucination
-A vector similarity search returns the top-K "closest" chunks by embedding distance. But cosine similarity is not the same as semantic relevance. A chunk about "access token expiry" may rank high for a query about "password policy" — and the LLM will use it to generate a confident, wrong answer.
-
-**Standard RAG produces no warning. The user never knows.**
-
-### Failure Mode 2: No Out-of-Scope Handling
-Ask a naive RAG about topics outside its documents ("How do I reset my GitLab password?") and it will still attempt to answer using whatever tangentially related chunks it found. This is not just wrong — in security and compliance contexts, it is dangerous misinformation.
-
-### Failure Mode 3: No Transparency or Observability
-A linear RAG pipeline gives users zero visibility into what happened: which documents were retrieved, whether they were relevant, how long inference took, and which policy produced the answer. Debugging hallucinations becomes guesswork.
-
-**In high-stakes domains like security policy compliance, a hallucinated answer is not just unhelpful — it is a liability.**
-
----
-
-## The Solution: Agentic Self-Corrective RAG
-
-Instead of a fixed pipeline, this project implements an **agent** — a system that observes the situation and *decides* what to do at each step.
-
-The agent is built as a **LangGraph StateGraph** with 4 specialised nodes. Between each node, the graph evaluates a condition and chooses the next path. This enables:
-
-- **Self-correction**: If retrieved documents fail the relevance grade, the system routes away from generation rather than hallucinating.
-- **Graceful rejection**: Queries outside the document domain get an honest "I don't have that information" response.
-- **Full transparency**: Every node execution is visible to the user in real time, including timing and path.
-
-The target corpus is a set of 6 **GitLab Security and Technology Policy** documents — a realistic enterprise compliance knowledge base covering Access Management, Audit Logging, Change Management, Penetration Testing, the SDLC, and overarching policy governance.
-
----
-
-## Agent Architecture
-
-The graph has **4 nodes** and **conditional routing**:
-
-```
-User Query
-    │
-    ▼
-┌──────────────┐
-│   retrieve   │  ← Embeds query, fetches top-6 chunks from ChromaDB (cosine similarity)
-└──────┬───────┘   Stores both documents AND their metadata (policy_title, filename) in state
-       │
-       ▼
-┌──────────────────────┐
-│   grade_documents    │  ← Dedicated LLM call: "Are these docs relevant to the question?"
-│   (Llama 3.1 8B)     │   Plain-text yes/no — avoids function-calling failures on small models
-└──────┬───────────────┘
-       │
-   ┌───┴─────────────────────────┐
-   │ yes (relevant)              │ no (irrelevant)
-   ▼                             ▼
-┌──────────┐              ┌─────────────┐
-│ generate │              │  no_answer  │  ← Returns polite rejection, zero hallucination
-│          │              │             │   Eliminates infinite retry loops
-│ Formats context          └──────┬──────┘
-│ with [Source: Policy |          │
-│  File:] headers                 │
-│ so LLM always cites             │
-│ the correct document            │
-└─────┬────┘                      │
-      │                           │
-      └─────────────┬─────────────┘
-                    ▼
-                   END
-```
-
-### Visual Graph (Auto-generated by LangGraph)
+### Auto-generated Graph from LangGraph
 
 ![Agent Graph](agent_graph.png)
 
-> This diagram is auto-generated by calling `graph.get_graph().draw_mermaid_png()` — it is the actual compiled execution graph, not a manual diagram.
+> Generated using `graph.get_graph().draw_mermaid_png()` — this is the real compiled graph, not a hand-drawn diagram.
 
 ---
 
-## Core Design Decisions
+## ⚙️ Key Technical Choices
 
-> This table explains *why* each technical choice was made. Decisions made under constraints are where real engineering judgment shows.
+Here are some of the decisions I made while building this and why:
 
-| Decision | What Was Chosen | Why — The Reasoning |
+| What | Choice | Reasoning |
 |---|---|---|
-| **Orchestration framework** | LangGraph `StateGraph` | Enables conditional branching, stateful loops, and graph-based routing — impossible in a plain LangChain `chain`. A chain always executes every step; a graph *decides* what to execute. |
-| **Document grading node** | Dedicated LLM call before generation | Forces the agent to evaluate relevance before committing to an answer. Eliminates the root cause of RAG hallucination: using irrelevant context. |
-| **Plain-text grading (not structured output)** | `yes`/`no` string response | Smaller open-source models like Llama 3.1 8B frequently fail at JSON function-calling / structured output. Plain-text prompting is more reliable at this scale. |
-| **`no_answer` exit node** | Explicit graceful rejection path | Prevents the graph from looping infinitely when no relevant docs are found, and eliminates out-of-scope hallucination. |
-| **Metadata-tagged context** | `[Source: Policy | File:]` prefix per chunk | Ensures the LLM has the citation available *inside the context window* — not retrieved separately. The model always knows which document each fact came from. |
-| **Similarity search over MMR** | `search_type="similarity"` | Maximum Marginal Relevance (MMR) prioritises diversity, which caused wrong-policy chunks to be retrieved. Similarity search returns the most relevant chunks consistently. |
-| **MemorySaver checkpointer** | Per-`thread_id` conversation state | Persists full conversation history across turns without re-processing documents. True multi-turn chat in a stateful graph. |
-| **Local HuggingFace embeddings** | `sentence-transformers/all-MiniLM-L6-v2` | No API cost, no rate limits, no latency overhead for embedding calls. Fast enough for this corpus size and runs entirely offline. |
-| **Groq inference** | Llama 3.1 8B Instant | Sub-second LLM responses even for complex policy questions — critical for a chat UI. Free tier is sufficient for development and demos. |
-| **MCP server** | FastMCP over the RAG graph | Exposes the entire agent as a standard MCP tool, enabling AI agents (Claude Desktop, VS Code Copilot, etc.) to query the policy knowledge base directly. |
+| **Framework** | LangGraph StateGraph | Needed conditional branching — a regular LangChain chain can't skip nodes or route dynamically |
+| **Relevance Check** | Separate LLM grading step | The grading happens *before* generation, so irrelevant docs never make it to the answer step |
+| **Grading Format** | Plain yes/no text | Llama 3.1 8B doesn't handle structured JSON output reliably, simple text works consistently |
+| **When docs aren't relevant** | Dedicated `no_answer` node | Instead of looping or retrying, it gives an honest "I don't know" — prevents hallucination |
+| **How citations work** | Each chunk gets a `[Source: Policy \| File:]` header | The LLM sees the source info right in its context, so it always knows where facts come from |
+| **Search strategy** | Cosine similarity (not MMR) | MMR was pulling in chunks from unrelated policies for diversity — pure similarity is more accurate here |
+| **Conversation memory** | LangGraph MemorySaver | Keeps chat history per session using `thread_id` — supports multi-turn conversations |
+| **Embeddings** | `all-MiniLM-L6-v2` (local) | Runs offline, no API costs, no rate limits — good enough for this corpus size |
+| **LLM** | Groq Llama 3.1 8B Instant | Sub-second responses, free tier works for development |
+| **MCP Integration** | FastMCP server | Makes the RAG pipeline callable by external AI agents like Claude Desktop or VS Code Copilot |
 
 ---
 
-## Implementation Walkthrough
+## 🔧 Implementation Details
 
-### Phase 1: Data Ingestion Pipeline
+### Data Ingestion
 
-```
-.md policy files → UnstructuredMarkdownLoader → Text Cleaner → RecursiveCharacterTextSplitter → ChromaDB
-```
+Policy documents (`.md` files) go through this pipeline:
 
-Each Markdown file is:
-1. Loaded with `UnstructuredMarkdownLoader` (preserves section structure)
-2. Cleaned (strip markdown headers and excess whitespace for embedding quality)
-3. Split into overlapping chunks — `CHUNK_SIZE=800`, `CHUNK_OVERLAP=150` — to prevent information loss at section boundaries
-4. Tagged with metadata: `{ "policy_title": "Audit Logging Policy", "filename": "audit-logging-policy.md" }`
-5. Embedded with `all-MiniLM-L6-v2` and persisted to ChromaDB
+1. **Load** — `UnstructuredMarkdownLoader` reads each file while preserving its structure
+2. **Clean** — Strip out markdown formatting artifacts and extra whitespace  
+3. **Split** — `RecursiveCharacterTextSplitter` with `chunk_size=800` and `overlap=150` so information at chunk boundaries isn't lost
+4. **Tag** — Each chunk gets metadata like `{ "policy_title": "Audit Logging Policy", "filename": "audit-logging-policy.md" }`
+5. **Store** — Chunks are embedded using `all-MiniLM-L6-v2` and saved to ChromaDB
 
-The `CHUNK_OVERLAP=150` is intentional — it ensures that sentences spanning a chunk boundary are fully represented in both chunks, preventing partial context retrieval.
+### Agent State
 
----
-
-### Phase 2: Agent State
-
-The graph shares a typed state dictionary `AgentState` across all nodes:
+All nodes share a typed state:
 
 ```python
 class AgentState(TypedDict):
-    messages:      Annotated[list[AnyMessage], add_messages]  # Full conversation history
-    documents:     Optional[list[Document]]                   # Retrieved LangChain Documents
-    doc_metadata:  Optional[list[dict]]                       # Extracted policy_title + filename per chunk
-    next_action:   Optional[Literal["generate", "no_answer"]] # Grader's routing decision
+    messages:      Annotated[list[AnyMessage], add_messages]
+    documents:     Optional[list[Document]]
+    doc_metadata:  Optional[list[dict]]
+    next_action:   Optional[Literal["generate", "no_answer"]]
 ```
 
-The `doc_metadata` field is the key to correct citations — it is populated by `retrieve_node` and consumed by `generate_node` to build the `[Source: Policy | File:]` context headers.
+The `doc_metadata` field tracks which policy each chunk came from — this is what makes accurate citations possible.
 
----
+### The Nodes
 
-### Phase 3: The Four Nodes
+- **`retrieve_node`** — Embeds the query, fetches 6 closest chunks from ChromaDB, stores documents + metadata in state
+- **`grade_documents_node`** — Asks the LLM "are these docs relevant to the question?" and sets `next_action` to either `generate` or `no_answer`
+- **`generate_node`** — Builds a formatted context with source headers for each chunk, then generates a cited answer
+- **`no_answer_node`** — Returns a polite message saying it couldn't find relevant info
 
-**`retrieve_node`**
-```python
-# Embeds query, fetches top-6 chunks, stores both documents AND metadata in state
-results = retriever.invoke(query)
-doc_metadata = [{"policy_title": d.metadata["policy_title"], 
-                 "filename": d.metadata["filename"]} for d in results]
-return {"documents": results, "doc_metadata": doc_metadata}
-```
-
-**`grade_documents_node`**
-```python
-# Plain-text yes/no grading — avoids structured output failures on small models
-prompt = f"Question: {query}\nDocuments: {content}\nAre these documents relevant? Answer yes or no."
-response = llm.invoke(prompt)
-next_action = "generate" if "yes" in response.content.lower() else "no_answer"
-return {"next_action": next_action}
-```
-
-**`generate_node`**
-```python
-# Tags each chunk with [Source: Policy | File:] so the LLM can always cite correctly
-context_parts = []
-for doc, meta in zip(documents, doc_metadata):
-    header = f"[Source: {meta['policy_title']} | File: {meta['filename']}]"
-    context_parts.append(f"{header}\n{doc.page_content}")
-formatted_context = "\n\n---\n\n".join(context_parts)
-```
-
-**`no_answer_node`**
-```python
-# Honest rejection — no hallucination, no retry loop
-message = "I could not find relevant information in the policy documents to answer your question."
-return {"messages": [AIMessage(content=message)]}
-```
-
----
-
-### Phase 4: Conditional Routing
+### Routing Logic
 
 ```python
 graph.add_conditional_edges(
     "grade_documents",
-    lambda state: state["next_action"],   # reads grader's decision from state
+    lambda state: state["next_action"],
     {"generate": "generate", "no_answer": "no_answer"}
 )
 ```
 
-The router reads directly from `AgentState["next_action"]` — set by the grader — and routes to the correct node. This is the core of the agent's decision-making.
+### Streamlit UI
+
+The app streams graph execution in real-time using `stream_mode="updates"`, so users can see each step as it happens:
+- Live agent path display (`retrieve → grade_documents → generate`)
+- Inference time tracking
+- Session metrics in the sidebar (query count, average response time, last path taken)
 
 ---
 
-### Phase 5: Streamlit UI with Observability
+## 🌐 MCP Server
 
-The UI uses `graph.stream(input, config, stream_mode="updates")` to receive each node's output as it executes. This enables:
-- **Real-time agent step display** via `st.status` — users see `retrieve → grade_documents → generate` as it happens
-- **Inference timing** — `time.time()` wraps the entire stream call; elapsed time is displayed in the status bar
-- **Session metrics sidebar** — cumulative query count, running average inference time, last query duration, last agent path
+The RAG agent is also exposed as an **MCP (Model Context Protocol) server**, so external AI tools can query the policy documents directly.
 
----
+**What's exposed:**
 
-## Tech Stack
-
-| Layer | Technology | Version | Role |
-|---|---|---|---|
-| **Agent Orchestration** | [LangGraph](https://github.com/langchain-ai/langgraph) | Latest | Stateful graph with conditional edges, loops, and memory |
-| **LLM Inference** | [Groq](https://groq.com) — Llama 3.1 8B Instant | API | Ultra-fast inference for both grading (~100ms) and generation |
-| **Embeddings** | `sentence-transformers/all-MiniLM-L6-v2` | HuggingFace | Local embedding model — no API cost, no rate limits |
-| **Vector Store** | [ChromaDB](https://www.trychroma.com/) | `langchain-chroma` | Persistent local vector database with cosine similarity |
-| **Document Loading** | `UnstructuredMarkdownLoader` | LangChain | Parses `.md` policy files preserving structure |
-| **Text Splitting** | `RecursiveCharacterTextSplitter` | LangChain | Overlapping chunk strategy for context continuity |
-| **Chat UI** | [Streamlit](https://streamlit.io) | Latest | Streaming chat with real-time agent status and metrics |
-| **Conversation Memory** | LangGraph `MemorySaver` | Built-in | Per-session state persistence via `thread_id` |
-| **MCP Protocol** | [FastMCP](https://github.com/jlowin/fastmcp) | Latest | Exposes RAG as a callable MCP tool for AI agents |
-| **Language** | Python | 3.11 | Core implementation |
-
----
-
-## MCP Server Integration
-
-Beyond the Streamlit UI, this project exposes the entire RAG agent as a **Model Context Protocol (MCP) server** — making it usable by any MCP-compatible AI client (Claude Desktop, VS Code Copilot Chat, Cursor, etc.).
-
-### What is MCP?
-MCP (Model Context Protocol) is an open standard that lets AI assistants call external tools through a structured interface. By wrapping the RAG pipeline as an MCP tool, any AI agent can query these policy documents as a first-class tool call.
-
-### What the MCP Server Exposes
-
-| Type | Name | Description |
+| Type | Name | What it does |
 |---|---|---|
-| **Tool** | `search_security_policies` | Takes a natural language query, runs the full agentic RAG graph, returns the answer as a string |
-| **Resource** | `policies://list` | Returns the list of all indexed policy document names |
+| Tool | `search_security_policies` | Accepts a question, runs the full agent graph, returns the answer |
+| Resource | `policies://list` | Returns names of all indexed policy documents |
 
-### Server Implementation Highlights
-- **`sys.path` injection** — Server file lives in `mcp-server/` subdirectory; project root is added to path so `src.*` imports resolve correctly
-- **Logging suppression** — `transformers`, `sentence_transformers`, and `chromadb` loggers set to `ERROR` level to prevent noise in MCP Inspector stderr
-- **String return type** — FastMCP requires tools to return primitive types; the `AIMessage.content` string is extracted before return to pass Pydantic validation
-- **Correct input format** — Wraps query in `HumanMessage` before invoking the graph, matching the state schema exactly
-
-```python
-# mcp-server/mcp_server.py — core tool
-@mcp.tool()
-def search_security_policies(query: str) -> str:
-    """Search GitLab security and technology policy documents using an agentic RAG pipeline."""
-    agent = build_graph()
-    config = {"configurable": {"thread_id": "mcp-session"}}
-    result = agent.invoke({"messages": [HumanMessage(content=query)]}, config=config)
-    for msg in reversed(result["messages"]):
-        if isinstance(msg, AIMessage):
-            return msg.content
-    return "No answer could be generated."
-```
-
-### Running the MCP Server
+**Run it:**
 ```bash
 cd mcp-server
 python mcp_server.py
 ```
 
-### Validating with MCP Inspector
+**Test with MCP Inspector:**
 ```bash
 npx @modelcontextprotocol/inspector@0.14.3 python mcp_server.py
 ```
 
-![MCP Inspector Validation](assets/SS4.png)
-
 ---
 
-## Project Structure
+## 📁 Project Structure
 
 ```
-DocRAGSearch/
+Agentic-Doc-Search-RAG/
+├── app.py                    # Streamlit chat interface
+├── save_graph.py             # Generates the agent graph diagram
+├── agent_graph.png           # Visual representation of the agent flow
+├── pyproject.toml            # Dependencies
+├── .env                      # API keys (not committed)
 │
-├── app.py                          # Streamlit chat UI — streaming, agent status, session metrics
-├── save_graph.py                   # One-time utility: generates agent_graph.png from compiled graph
-├── agent_graph.png                 # Auto-generated LangGraph execution graph diagram
-├── pyproject.toml                  # Project dependencies (uv/pip compatible)
-├── .env                            # API keys — NOT committed
-│
-├── assets/                         # Screenshots for README showcase
-│   ├── SS1.png                     # Accurate policy answer with agent path trace
-│   ├── SS2.png                     # Graceful out-of-scope rejection
-│   ├── SS3.png                     # Session metrics sidebar
-│   └── SS4.png                     # MCP Inspector tool validation
+├── assets/                   # Screenshots
 │
 ├── data/
 │   └── security-and-technology-policies/
@@ -351,35 +191,31 @@ DocRAGSearch/
 │       ├── software-development-lifecycle-policy.md
 │       └── security-and-technology-policies-management.md
 │
-├── db/
-│   └── chroma_db/                  # Persisted ChromaDB vector store (not committed)
-│
 ├── mcp-server/
-│   ├── mcp_server.py               # FastMCP server — exposes RAG as MCP tool + resource
-│   └── test_client.py              # Direct Python test client (no MCP protocol needed)
+│   └── mcp_server.py        # FastMCP server
 │
 └── src/
-    ├── config.py                   # Centralized config: env vars, model names, chunk parameters
-    ├── state.py                    # LangGraph AgentState TypedDict
-    ├── graph.py                    # All 4 nodes + conditional routing + graph compilation
-    ├── prompts.py                  # RAG system prompt (hardened against hedging)
-    ├── data_ingestion.py           # Markdown loader → text cleaner → chunker → metadata tagger
-    ├── vector_store.py             # ChromaDB create + retriever factory
-    ├── schema.py                   # Pydantic schemas
-    └── utils.py                    # Utility helpers
+    ├── config.py             # Environment variables and settings
+    ├── state.py              # AgentState definition
+    ├── graph.py              # Node implementations + graph compilation
+    ├── prompts.py            # System prompts for the LLM
+    ├── data_ingestion.py     # Document loading and chunking
+    ├── vector_store.py       # ChromaDB setup and retriever
+    ├── schema.py             # Data schemas
+    └── utils.py              # Helper functions
 ```
 
 ---
 
-## Setup & Run
+## 🚀 Getting Started
 
-### 1. Clone the repository
+### 1. Clone and enter the project
 ```bash
 git clone https://github.com/tiirth22/Agentic-Doc-Search-RAG.git
 cd Agentic-Doc-Search-RAG
 ```
 
-### 2. Create and activate a virtual environment
+### 2. Set up a virtual environment
 ```bash
 python -m venv .venv
 
@@ -395,14 +231,14 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-### 4. Set up environment variables
-Create a `.env` file in the project root:
-```env
-GROQ_API_KEY=your_groq_api_key_here
+### 4. Add your API key
+Create a `.env` file:
 ```
-Get a free API key at [console.groq.com](https://console.groq.com)
+GROQ_API_KEY=your_key_here
+```
+You can get a free key from [console.groq.com](https://console.groq.com).
 
-### 5. Build the vector store (run once)
+### 5. Initialize the vector store (first time only)
 ```bash
 python -c "
 from src.data_ingestion import DataIngestor
@@ -413,78 +249,61 @@ VectorStoreManager().create_vector_store(chunks)
 "
 ```
 
-### 6. Launch the Streamlit app
+### 6. Run the app
 ```bash
 streamlit run app.py
 ```
 
-### 7. (Optional) Launch the MCP server
-```bash
-cd mcp-server
-python mcp_server.py
-```
-
-### 8. (Optional) Regenerate the agent graph diagram
-```bash
-python save_graph.py
-```
-
 ---
 
-## Sample Q&A Results
+## 📊 Example Queries
 
-| Question | Agent Path | Behavior |
+| Query | What happens | Result |
 |---|---|---|
-| *"Who is responsible for implementing the Audit Logging Policy?"* | `retrieve → grade → generate` | Correctly identifies Security Team as responsible owner |
-| *"What system tiers are in scope for Change Management?"* | `retrieve → grade → generate` | Returns Tier 1, 2, 3 in-scope; Tier 4 explicitly excluded |
-| *"What happens after a penetration test finds critical vulnerabilities?"* | `retrieve → grade → generate` | Cites CM-3/pen testing policy: assess severity, Vuln Management Standard, retest requirement |
-| *"How often must penetration tests be conducted?"* | `retrieve → grade → generate` | Answers: at minimum annually, and after significant system changes |
-| *"How do I reset my GitLab password?"* | `retrieve → grade → no_answer` | Retrieves docs, grades as NOT relevant, routes to rejection — zero hallucination |
-| *"What is the company's vacation policy?"* | `retrieve → grade → no_answer` | Completely out-of-scope query handled cleanly — polite, accurate rejection |
+| "Who is responsible for implementing the Audit Logging Policy?" | `retrieve → grade → generate` | Correctly identifies the Security Team |
+| "What system tiers are in scope for Change Management?" | `retrieve → grade → generate` | Lists Tiers 1-3 as in-scope, notes Tier 4 is excluded |
+| "How often must penetration tests be conducted?" | `retrieve → grade → generate` | At minimum annually + after significant system changes |
+| "How do I reset my GitLab password?" | `retrieve → grade → no_answer` | Recognizes this isn't in the documents, declines gracefully |
+| "What is the company's vacation policy?" | `retrieve → grade → no_answer` | Completely out of scope — handled without any hallucination |
 
 ---
 
-## Engineering Highlights
+## 🔍 What's Different from a Standard RAG?
 
-### What Makes This Different from Standard RAG
-
-| Standard RAG Pipeline | This System |
+| Traditional RAG | This Project |
 |---|---|
-| Always generates an answer | Only generates when docs pass relevance grading |
-| Silently hallucinates on irrelevant retrieval | Routes to explicit `no_answer` node |
-| No visibility into what was retrieved | Full agent path in UI (`retrieve → grade → generate`) |
-| No citation tracking | Every chunk tagged `[Source: Policy \| File:]` before generation |
-| Single-use query | Multi-turn chat via `MemorySaver` + `thread_id` |
-| Linear, no self-correction | Conditional routing — the agent decides what to do |
-| UI only | Also exposed as MCP tool for AI agent integration |
-
-### Specific Engineering Decisions That Prevented Bugs
-
-1. **Plain-text grading over structured output** — Llama 3.1 8B failed structured output / function-calling consistently. Switching to plain `yes/no` prompting eliminated `BadRequestError` entirely.
-
-2. **`override=True` in `load_dotenv`** — Without this flag, `dotenv` skips variables already set in the environment. The API key appeared to load but was ignored, causing `AuthenticationError` at runtime.
-
-3. **Explicit `next_action` key in grader return** — The grader initially returned `{"generate": "yes"}` (wrong key). The router was reading `state["next_action"]` (correct key). This mismatch caused a `KeyError` on every query. Fixed by aligning the return key to match the state field name.
-
-4. **Similarity search over MMR** — MMR's diversity-first heuristic was retrieving chunks from unrelated policies when the query matched multiple documents. Switching to pure similarity search ensured the most relevant document's chunks dominated the top-6 results.
-
-5. **Metadata stored separately from documents** — LangChain `Document` objects carry `.metadata` but the generate node needed a clean, structured list of `{policy_title, filename}` pairs indexed to match the documents list. Storing `doc_metadata` as a separate state field made this clean and reliable.
+| Always produces an answer | Only answers when documents are relevant |
+| Can silently hallucinate | Routes to an honest "I don't know" |
+| No visibility into the process | Shows the full agent path in real time |
+| No source tracking | Every chunk is tagged with its source document |
+| One-shot queries only | Multi-turn chat with conversation memory |
+| Only works through one UI | Also available as an MCP tool for AI agents |
 
 ---
 
-## License
+## 🐛 Bugs I Ran Into (and Fixed)
 
-This project is licensed under the **MIT License** — see [LICENSE](LICENSE) for details.
+A few issues I hit during development that might help if you're building something similar:
 
-```
-MIT License — Copyright (c) 2026 Tirth Jignesh Dalal
-```
+1. **Structured output failures** — Llama 3.1 8B kept failing when I asked for JSON responses during grading. Switched to plain `yes/no` text and it worked reliably.
+
+2. **Environment variables not loading** — Had to use `override=True` in `load_dotenv()` because without it, the library skips variables that are already set in the system environment.
+
+3. **State key mismatch** — My grading node was returning `{"generate": "yes"}` but the router expected `state["next_action"]`. Took a while to debug that `KeyError`.
+
+4. **MMR returning wrong documents** — The diversity-first approach of MMR was pulling chunks from unrelated policies. Switching to standard similarity search fixed the accuracy.
+
+5. **Metadata access in generation** — Instead of digging into LangChain `Document.metadata` during generation, I store `doc_metadata` as its own state field during retrieval. Cleaner and less error-prone.
+
+---
+
+## 📝 License
+
+MIT License — see [LICENSE](LICENSE) for the full text.
 
 ---
 
 <p align="center">
-  Built with care by <b>Tirth Jignesh Dalal</b><br/>
-  <a href="https://github.com/tiirth22">GitHub Profile</a> &nbsp;•&nbsp;
-  <a href="https://github.com/tiirth22/Agentic-Doc-Search-RAG">Repository</a>
+  <b>Built by Tirth Jignesh Dalal</b><br/>
+  <a href="https://github.com/tiirth22">GitHub</a>
 </p>
-
