@@ -1,7 +1,8 @@
 [project]
 name = "docragsearch"
 version = "0.1.0"
-description = "Add your description here"
+description = "A production-grade, Self-Corrective Agentic RAG system built with LangGraph, Groq, and ChromaDB"
+authors = [{name = "Tirth Jignesh Dalal", email = "tirth2216@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
