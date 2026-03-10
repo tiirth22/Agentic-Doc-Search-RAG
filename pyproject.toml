@@ -1,0 +1,24 @@
+[project]
+name = "docragsearch"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "chromadb>=1.5.2",
+    "langchain>=0.3.0",
+    "langchain-chroma>=1.1.0",
+    "langchain-community>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-groq>=1.1.2",
+    "langchain-huggingface>=1.2.1",
+    "langgraph>=0.2.0",
+    "markdown>=3.10.2",
+    "mcp[cli]>=1.26.0",
+    "pypdf>=6.7.5",
+    "python-dotenv>=1.2.2",
+    "sentence-transformers>=5.2.3",
+    "streamlit>=1.55.0",
+    "unstructured>=0.21.5",
+    "uv>=0.10.8",
+]
