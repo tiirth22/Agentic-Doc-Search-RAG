@@ -375,7 +375,7 @@ DocRAGSearch/
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/BrijeshRakhasiya/Agentic-Doc-Search-RAG.git
+git clone https://github.com/tiirth22/Agentic-Doc-Search-RAG.git
 cd Agentic-Doc-Search-RAG
 ```
 
@@ -477,14 +477,14 @@ python save_graph.py
 This project is licensed under the **MIT License** — see [LICENSE](LICENSE) for details.
 
 ```
-MIT License — Copyright (c) 2026 Brijesh Rakhasiya
+MIT License — Copyright (c) 2026 Tirth Jignesh Dalal
 ```
 
 ---
 
 <p align="center">
-  Built with care by <b>Brijesh Rakhasiya</b><br/>
-  <a href="https://github.com/BrijeshRakhasiya">GitHub Profile</a> &nbsp;•&nbsp;
-  <a href="https://github.com/BrijeshRakhasiya/Agentic-Doc-Search-RAG">Repository</a>
+  Built with care by <b>Tirth Jignesh Dalal</b><br/>
+  <a href="https://github.com/tiirth22">GitHub Profile</a> &nbsp;•&nbsp;
+  <a href="https://github.com/tiirth22/Agentic-Doc-Search-RAG">Repository</a>
 </p>
 
